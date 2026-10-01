@@ -1,6 +1,6 @@
 // ==============================================================================
 // Hollis-Bit's OS — build.zig
-// Сборка и запуск 16-битного этапа через систему сборки Zig
+// Сборка и запуск 64-битного ядра через Zig Build System
 // ==============================================================================
 
 const std = @import("std");
@@ -18,13 +18,14 @@ pub fn build(b: *std.Build) void {
         \\objcopy -O binary build/kernel.elf build/kernel.bin && \
         \\dd if=build/boot.bin of=build/os.img bs=512 count=1 conv=notrunc status=none && \
         \\dd if=build/stage2_16.bin of=build/os.img bs=512 seek=1 count=16 conv=notrunc status=none && \
-        \\dd if=/dev/zero of=build/os.img bs=512 count=20480 seek=17 conv=notrunc status=none
+        \\dd if=build/kernel.bin of=build/os.img bs=512 seek=17 count=64 conv=notrunc status=none && \
+        \\dd if=/dev/zero of=build/os.img bs=512 count=20480 seek=81 conv=notrunc status=none
     });
 
     b.default_step.dependOn(&build_cmd.step);
 
     // 2. Шаг запуска (команда: zig build run)
-    const run_step = b.step("run", "Запуск Hollis-Bit's OS (16-bit Real Mode) в QEMU");
+    const run_step = b.step("run", "Запуск Hollis-Bit's OS (64-bit Long Mode) в QEMU");
     const run_cmd = b.addSystemCommand(&.{
         "qemu-system-x86_64",
         "-drive", "format=raw,file=build/os.img",

@@ -7,7 +7,7 @@
 [![ASM](https://img.shields.io/badge/Assembler-NASM-blue.svg)](https://nasm.us/)
 [![Target](https://img.shields.io/badge/Target-x86__64_BareMetal-red.svg)]()
 [![Emulator](https://img.shields.io/badge/Emulator-QEMU-purple.svg)](https://www.qemu.org/)
-[![Status](https://img.shields.io/badge/Status-Stage%201.2%20(32--bit%20Protected%20Mode)%20Complete-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/Status-Stage%201%20(64--bit%20Long%20Mode)%20Complete-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 <br/>
@@ -97,19 +97,25 @@ graph TD
 
 ---
 
-## 💻 Команды 32-битной консоли (`hollis32>`)
+## 💻 64-битная Linux-подобная консоль (`root@hollis-os:~#`)
 
-В 32-битном Защищенном Режиме доступна интерактивная консоль управления:
+После мгновенного переключения 16 -> 32 -> 64 бит ядро на Zig запускает полноценный интерактивный терминал:
 
 | Команда | Описание |
 | :--- | :--- |
-| `help` | Список всех доступных команд ядра |
-| `cpu` | Запрос к процессору через `cpuid`: вывод вендора (AMD/Intel) и проверка 64-битного Long Mode |
-| `mem` | Отображение доступного объема ОЗУ (E820) и 32-битной плоской адресации |
-| `color` | Циклическое переключение цветовой темы VGA-терминала (зеленый, голубой, желтый и др.) |
-| `clear` / `cls` | Очистка видеопамяти VGA и терминала через ANSI-последовательность |
-| `next` | Проверка готовности процессора к переходу в 64-битный режим |
-| `reboot` | Аппаратный сброс и перезагрузка через контроллер 8042 (`0x64`) |
+| `uname` / `uname -a` | Вывод информации об архитектуре ядра (`x86_64 BareMetal`) |
+| `whoami` | Текущий пользователь (`root`) |
+| `hostname` | Имя виртуальной машины (`hollis-gaming-station`) |
+| `ls` / `dir` | Список каталогов игр (`doom/`, `quake/`, `diablo/`, `gothic/`, `morrowind/`) и системных файлов |
+| `cat <file>` | Просмотр содержимого файлов (`cat readme.txt`, `cat os-release`, `cat system.log`) |
+| `echo <text>` | Вывод переданного текста на экран |
+| `free` / `free -m` | Статистика оперативной памяти (Total, Used, Free RAM) |
+| `uptime` | Время работы и счетчик тиков системы |
+| `games` | Таблица статуса готовности игровых подсистем |
+| `clear` | Очистка видеопамяти и терминала через ANSI `\033[2J\033[H` |
+| `reboot` | Аппаратный перезапуск через порт контроллера `0x64` |
+| `poweroff` / `halt` | Остановка процессора |
+| `help` / `man` | Полный список доступных команд |
 
 > **Особенность кода:** Все файлы снабжены лаконичными и понятными комментариями к смысловым блокам, объясняющими работу низкоуровневого железа и архитектуры.
 

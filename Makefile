@@ -1,5 +1,5 @@
 # ==============================================================================
-# Hollis-Bit's OS — Makefile сборки и запуска
+# Hollis-Bit's OS — Makefile сборки и запуска (64-bit Long Mode)
 # ==============================================================================
 
 BUILD_DIR = build
@@ -14,17 +14,14 @@ IMG       = $(BUILD_DIR)/os.img
 
 all: $(IMG)
 
-# 1. Сборка MBR (сектор 1, 512 байт)
 $(BUILD_DIR)/boot.bin: $(BOOT_SRC)
 	@mkdir -p $(BUILD_DIR)
 	nasm -f bin $(BOOT_SRC) -o $@
 
-# 2. Сборка Stage 2 (секторы 2-5, 2048 байт)
 $(BUILD_DIR)/stage2_16.bin: $(STAGE2_SRC)
 	@mkdir -p $(BUILD_DIR)
 	nasm -f bin $(STAGE2_SRC) -o $@
 
-# 3. Сборка ядра (ASM + Zig)
 $(BUILD_DIR)/entry.o: $(ASM_ENTRY)
 	@mkdir -p $(BUILD_DIR)
 	nasm -f elf64 $(ASM_ENTRY) -o $@
@@ -37,11 +34,11 @@ $(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/entry.o $(BUILD_DIR)/main.o $(LINKER_LD)
 	ld -m elf_x86_64 -T $(LINKER_LD) $(BUILD_DIR)/entry.o $(BUILD_DIR)/main.o -o $(BUILD_DIR)/kernel.elf
 	objcopy -O binary $(BUILD_DIR)/kernel.elf $@
 
-# 4. Сборка дискового образа os.img
 $(IMG): $(BUILD_DIR)/boot.bin $(BUILD_DIR)/stage2_16.bin $(BUILD_DIR)/kernel.bin
 	dd if=$(BUILD_DIR)/boot.bin of=$@ bs=512 count=1 conv=notrunc status=none
 	dd if=$(BUILD_DIR)/stage2_16.bin of=$@ bs=512 seek=1 count=16 conv=notrunc status=none
-	dd if=/dev/zero of=$@ bs=512 count=20480 seek=17 conv=notrunc status=none
+	dd if=$(BUILD_DIR)/kernel.bin of=$@ bs=512 seek=17 count=64 conv=notrunc status=none
+	dd if=/dev/zero of=$@ bs=512 count=20480 seek=81 conv=notrunc status=none
 
 run: $(IMG)
 	qemu-system-x86_64 -drive format=raw,file=$(IMG) -serial stdio -m 128M
