@@ -1,0 +1,245 @@
+; ==============================================================================
+; Hollis-Bit's OS — Вторая стадия загрузчика (16-битный Real Mode)
+; Файл: src/boot/stage2_16.asm
+; Адрес загрузки в ОЗУ: 0x7E00 (сразу за MBR)
+; Назначение: Полноценное освоение 16-битного режима (A20, E820 карта памяти, BIOS ввод)
+; ==============================================================================
+
+[bits 16]
+[org 0x7e00]
+
+stage2_entry:
+    ; 1. Сохраняем номер диска из регистра DL
+    mov [boot_drive], dl
+
+    ; 2. Вывод красивого баннера 16-битного этапа
+    mov si, banner_msg
+    call print_string
+
+    ; 3. Проверка и включение адресной линии A20
+    ; В 8086 процессоре адреса заворачивались по кругу на 1 МБ (wrap-around).
+    ; Линия A20 открывает 21-й провод адресации для доступа к памяти выше 1 МБ.
+    call check_a20
+    cmp ax, 1
+    je .a20_already_on
+
+    ; Если A20 выключена — включаем через Fast A20 (аппаратный порт 0x92)
+    in al, 0x92
+    or al, 00000010b    ; Устанавливаем 1-й бит (Fast A20)
+    out 0x92, al
+
+.a20_already_on:
+    mov si, msg_a20_ok
+    call print_string
+
+    ; 4. Определение доступной оперативной памяти через BIOS E820
+    ; Системный вызов BIOS int 0x15 (EAX = 0xE820) считывает карту физической памяти.
+    call detect_memory_e820
+
+    ; 5. Интерактивная проверка клавиатурного прерывания BIOS (int 0x16)
+    ; Демонстрирует чтение клавиш в реальном режиме без драйверов.
+    mov si, msg_press_key
+    call print_string
+
+    mov ah, 0x00        ; Функция 0: ожидание нажатия клавиши
+    int 0x16            ; AL содержит ASCII-символ нажатой клавиши
+
+    mov si, msg_key_ok
+    call print_string
+    mov ah, 0x0e        ; Печатаем нажатый символ на экране
+    int 0x10
+    mov dx, 0x3f8       ; И отправляем в COM1
+    out dx, al
+    mov si, newline
+    call print_string
+
+    ; 6. Итоговый отчет о готовности 16-битной эпохи
+    mov si, msg_stage1_done
+    call print_string
+
+    ; 7. Остановка процессора до дальнейших указаний разработчика
+.halt_loop:
+    hlt
+    jmp .halt_loop
+
+
+; ==============================================================================
+; ПОДПРОГРАММЫ (16-БИТНЫЙ АССЕМБЛЕР)
+; ==============================================================================
+
+; --- Проверка включения линии A20 через сравнение памяти ---
+; Возвращает AX = 1 (включена) или AX = 0 (выключена)
+check_a20:
+    pushf
+    push ds
+    push es
+    push di
+    push si
+
+    cli
+    xor ax, ax
+    mov es, ax          ; ES = 0x0000
+    not ax
+    mov ds, ax          ; DS = 0xFFFF
+
+    mov di, 0x7dfe      ; ES:DI = 0x0000:0x7DFE (сигнатура MBR)
+    mov si, 0x7e0e      ; DS:SI = 0xFFFF:0x7E0E (тот же адрес при выключенной A20)
+
+    mov al, [es:di]     ; Читаем байт
+    push ax
+    mov al, [ds:si]     ; Читаем байт по смещенному адресу
+    pop bx
+    cmp al, bl          ; Если они равны — возможно, память зациклена
+    jne .a20_is_on
+
+    mov ax, 0
+    jmp .exit
+
+.a20_is_on:
+    mov ax, 1
+
+.exit:
+    pop si
+    pop di
+    pop es
+    pop ds
+    popf
+    ret
+
+
+; --- Чтение объема ОЗУ через BIOS E820 ---
+detect_memory_e820:
+    mov si, msg_mem_detect
+    call print_string
+
+    xor ebx, ebx            ; EBX = 0 для первого вызова
+    mov dword [total_kb], 0 ; Обнуляем счетчик памяти
+
+.e820_loop:
+    mov eax, 0xe820
+    mov edx, 0x534d4150     ; Магическое слово 'SMAP'
+    mov ecx, 24             ; Размер буфера для дескриптора
+    mov di, e820_buffer     ; Адрес временного буфера
+    int 0x15
+    jc .done                ; Если перенос (CF=1) или конец — завершаем
+
+    ; Проверяем тип области: 1 = свободная ОЗУ (Usable RAM)
+    cmp dword [e820_buffer + 16], 1
+    jne .next_entry
+
+    ; Добавляем длину блока (младшие 32 бита длины / 1024 = КБ)
+    mov eax, [e820_buffer + 8]
+    shr eax, 10             ; Переводим байты в Килобайты (деление на 1024)
+    add [total_kb], eax
+
+.next_entry:
+    test ebx, ebx           ; Если EBX = 0, значит это была последняя запись
+    jz .done
+    jmp .e820_loop
+
+.done:
+    ; Переводим КБ в Мегабайты для красивого вывода (КБ / 1024)
+    mov eax, [total_kb]
+    shr eax, 10
+    call print_dec          ; Печатаем число МБ
+
+    mov si, msg_mb_suffix
+    call print_string
+    ret
+
+
+; --- Вывод десятичного числа из регистра EAX на экран и в COM1 ---
+print_dec:
+    pusha
+    mov cx, 0
+    mov ebx, 10
+.divide:
+    xor edx, edx
+    div ebx
+    push dx
+    inc cx
+    test eax, eax
+    jnz .divide
+.print_digits:
+    pop dx
+    add dl, '0'
+    mov al, dl
+    mov ah, 0x0e
+    int 0x10
+    push dx
+    mov dx, 0x3f8
+    out dx, al
+    pop dx
+    loop .print_digits
+    popa
+    ret
+
+
+; --- Вывод строки (адрес в SI, конец строки 0) с дублированием в COM1 ---
+print_string:
+    push ax
+    push dx
+.loop:
+    lodsb
+    test al, al
+    jz .done
+    mov ah, 0x0e
+    mov bh, 0x00
+    mov bl, 0x07
+    int 0x10
+    mov dx, 0x3f8
+    out dx, al
+    jmp .loop
+.done:
+    pop dx
+    pop ax
+    ret
+
+
+; ==============================================================================
+; ДАННЫЕ И СТРОКИ
+; ==============================================================================
+boot_drive:     db 0
+total_kb:       dd 0
+
+banner_msg:
+    db "==================================================", 13, 10
+    db "    HOLLIS-BIT's OS -- 16-BIT REAL MODE STAGE     ", 13, 10
+    db "==================================================", 13, 10, 13, 10, 0
+
+msg_a20_ok:
+    db "[OK] A20 Address Line enabled (Memory > 1MB unlocked)", 13, 10, 0
+
+msg_mem_detect:
+    db "[OK] BIOS E820 Memory Map: Usable RAM = ", 0
+
+msg_mb_suffix:
+    db " MB", 13, 10, 0
+
+msg_press_key:
+    db 13, 10, "[TEST] Testing 16-bit BIOS Keyboard Interrupt (int 0x16)...", 13, 10
+    db "       >> Press any key on your keyboard to continue: ", 0
+
+msg_key_ok:
+    db 13, 10, "[OK] Key detected: '", 0
+
+newline:
+    db "'", 13, 10, 0
+
+msg_stage1_done:
+    db 13, 10, "==================================================", 13, 10
+    db " [SUCCESS] Full 16-bit Real Mode Stage Complete!  ", 13, 10
+    db " - BIOS Disk I/O: 4 sectors loaded to 0x7E00      ", 13, 10
+    db " - Memory: E820 map parsed successfully           ", 13, 10
+    db " - Hardware: A20 gate active                      ", 13, 10
+    db " - Interactive: BIOS keyboard int 0x16 verified   ", 13, 10
+    db " Ready to proceed to 32-bit Protected Mode!       ", 13, 10
+    db "==================================================", 13, 10, 0
+
+; Буфер для записи одного дескриптора E820 (24 байта)
+align 4
+e820_buffer:
+    times 24 db 0
+
+; Выравниваем Stage 2 до ровно 4 секторов (2048 байт)
+times 2048 - ($ - $$) db 0

@@ -7,7 +7,7 @@
 [![ASM](https://img.shields.io/badge/Assembler-NASM-blue.svg)](https://nasm.us/)
 [![Target](https://img.shields.io/badge/Target-x86__64_BareMetal-red.svg)]()
 [![Emulator](https://img.shields.io/badge/Emulator-QEMU-purple.svg)](https://www.qemu.org/)
-[![Status](https://img.shields.io/badge/Status-Stage%200%20Ready-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/Status-Stage%201.1%20(16--bit%20Real%20Mode)%20Complete-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 <br/>
