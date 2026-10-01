@@ -17,8 +17,8 @@ pub fn build(b: *std.Build) void {
         \\ld -m elf_x86_64 -T src/linker.ld build/entry.o build/main.o -o build/kernel.elf && \
         \\objcopy -O binary build/kernel.elf build/kernel.bin && \
         \\dd if=build/boot.bin of=build/os.img bs=512 count=1 conv=notrunc status=none && \
-        \\dd if=build/stage2_16.bin of=build/os.img bs=512 seek=1 count=4 conv=notrunc status=none && \
-        \\dd if=/dev/zero of=build/os.img bs=512 count=20480 seek=5 conv=notrunc status=none
+        \\dd if=build/stage2_16.bin of=build/os.img bs=512 seek=1 count=16 conv=notrunc status=none && \
+        \\dd if=/dev/zero of=build/os.img bs=512 count=20480 seek=17 conv=notrunc status=none
     });
 
     b.default_step.dependOn(&build_cmd.step);

@@ -27,10 +27,10 @@ objcopy -O binary build/kernel.elf build/kernel.bin
 echo "[6/6] Формирование загрузочного образа диска os.img..."
 # Записываем MBR-загрузчик в сектор 1 (первые 512 байт диска)
 dd if=build/boot.bin of=build/os.img bs=512 count=1 conv=notrunc status=none
-# Записываем Stage 2 (16-битное расширение) в секторы 2..5 (2048 байт)
-dd if=build/stage2_16.bin of=build/os.img bs=512 seek=1 count=4 conv=notrunc status=none
+# Записываем Stage 2 (16-бит + 32-бит ядро) в секторы 2..17 (8192 байта = 16 секторов)
+dd if=build/stage2_16.bin of=build/os.img bs=512 seek=1 count=16 conv=notrunc status=none
 # Создаем пространство диска в 10 МБ для будущих секторов ядра и игровых данных
-dd if=/dev/zero of=build/os.img bs=512 count=20480 seek=5 conv=notrunc status=none
+dd if=/dev/zero of=build/os.img bs=512 count=20480 seek=17 conv=notrunc status=none
 
 echo "--------------------------------------------------------"
 echo "Сборка завершена успешно! Запуск QEMU..."

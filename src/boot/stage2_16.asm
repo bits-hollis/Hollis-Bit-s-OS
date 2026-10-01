@@ -88,10 +88,50 @@ stage2_entry:
     mov si, msg_stage1_done
     call print_string
 
-    ; 7. Остановка процессора до дальнейших указаний
-.halt_loop:
-    hlt
-    jmp .halt_loop
+    ; 7. Запрос на переключение в 32-битный Защищенный Режим
+    mov si, msg_press_to_pmode
+    call print_string
+
+.wait_pm_key:
+    mov ah, 0x01
+    int 0x16
+    jnz .pm_key_bios
+
+    mov dx, 0x3fd
+    in al, dx
+    test al, 0x01
+    jnz .pm_key_serial
+
+    pause
+    jmp .wait_pm_key
+
+.pm_key_bios:
+    mov ah, 0x00
+    int 0x16
+    jmp enter_protected_mode
+
+.pm_key_serial:
+    mov dx, 0x3f8
+    in al, dx
+    jmp enter_protected_mode
+
+enter_protected_mode:
+    mov si, msg_switching_pm
+    call print_string
+
+    ; 8. Отключаем прерывания перед сменой режима
+    cli
+
+    ; 9. Загружаем 32-битную таблицу дескрипторов сегментов GDT
+    lgdt [gdt_descriptor]
+
+    ; 10. Включаем Защищенный Режим: бит PE (Protection Enable) в регистре CR0
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+
+    ; 11. Дальний переход (Far Jump) для очистки 16-битного конвейера инструкций
+    jmp 0x08:pmode_entry
 
 
 ; ==============================================================================
@@ -267,10 +307,53 @@ msg_stage1_done:
     db " Ready to proceed to 32-bit Protected Mode!       ", 13, 10
     db "==================================================", 13, 10, 0
 
+msg_press_to_pmode:
+    db 13, 10, ">> Press any key to ENTER 32-BIT PROTECTED MODE...", 13, 10, 0
+
+msg_switching_pm:
+    db 13, 10, "[PMODE] Loading GDT and switching CPU to 32-bit Protected Mode...", 13, 10, 0
+
 ; Буфер для записи одного дескриптора E820 (24 байта)
 align 4
 e820_buffer:
     times 24 db 0
 
-; Выравниваем Stage 2 до ровно 4 секторов (2048 байт)
-times 2048 - ($ - $$) db 0
+; ==============================================================================
+; ТАБЛИЦА ДЕСКРИПТОРОВ СЕГМЕНТОВ GDT (32-BIT)
+; ==============================================================================
+align 8
+gdt_start:
+    ; 1. Нулевой обязательный дескриптор (8 байт нулей)
+    dd 0x00000000
+    dd 0x00000000
+
+    ; 2. Селектор 0x08: 32-битный сегмент кода (Code Segment)
+    ; Base: 0x00000000, Limit: 4GB, Ring 0, Exec/Read
+    dw 0xffff           ; Limit (0-15)
+    dw 0x0000           ; Base (0-15)
+    db 0x00             ; Base (16-23)
+    db 10011010b        ; Access Byte (0x9A: Present, Ring 0, Code, Exec/Read)
+    db 11001111b        ; Flags (Granularity 4KB, 32-bit) + Limit (16-19: 0xF)
+    db 0x00             ; Base (24-31)
+
+    ; 3. Селектор 0x10: 32-битный сегмент данных (Data Segment)
+    ; Base: 0x00000000, Limit: 4GB, Ring 0, Read/Write
+    dw 0xffff           ; Limit (0-15)
+    dw 0x0000           ; Base (0-15)
+    db 0x00             ; Base (16-23)
+    db 10010010b        ; Access Byte (0x92: Present, Ring 0, Data, Read/Write)
+    db 11001111b        ; Flags (Granularity 4KB, 32-bit) + Limit (16-19: 0xF)
+    db 0x00             ; Base (24-31)
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1  ; Размер таблицы - 1
+    dd gdt_start                ; Физический адрес начала таблицы
+
+; ==============================================================================
+; ПОДКЛЮЧЕНИЕ 32-БИТНОГО МОДУЛЯ (STAGE 32)
+; ==============================================================================
+%include "src/boot/stage32.asm"
+
+; Выравниваем полный Stage 2 до 16 секторов (8192 байта = 8 КБ)
+times 8192 - ($ - $$) db 0

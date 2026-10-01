@@ -40,8 +40,8 @@ $(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/entry.o $(BUILD_DIR)/main.o $(LINKER_LD)
 # 4. Сборка дискового образа os.img
 $(IMG): $(BUILD_DIR)/boot.bin $(BUILD_DIR)/stage2_16.bin $(BUILD_DIR)/kernel.bin
 	dd if=$(BUILD_DIR)/boot.bin of=$@ bs=512 count=1 conv=notrunc status=none
-	dd if=$(BUILD_DIR)/stage2_16.bin of=$@ bs=512 seek=1 count=4 conv=notrunc status=none
-	dd if=/dev/zero of=$@ bs=512 count=20480 seek=5 conv=notrunc status=none
+	dd if=$(BUILD_DIR)/stage2_16.bin of=$@ bs=512 seek=1 count=16 conv=notrunc status=none
+	dd if=/dev/zero of=$@ bs=512 count=20480 seek=17 conv=notrunc status=none
 
 run: $(IMG)
 	qemu-system-x86_64 -drive format=raw,file=$(IMG) -serial stdio -m 128M

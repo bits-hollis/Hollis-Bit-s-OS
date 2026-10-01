@@ -7,7 +7,7 @@
 [![ASM](https://img.shields.io/badge/Assembler-NASM-blue.svg)](https://nasm.us/)
 [![Target](https://img.shields.io/badge/Target-x86__64_BareMetal-red.svg)]()
 [![Emulator](https://img.shields.io/badge/Emulator-QEMU-purple.svg)](https://www.qemu.org/)
-[![Status](https://img.shields.io/badge/Status-Stage%201.1%20(16--bit%20Real%20Mode)%20Complete-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/Status-Stage%201.2%20(32--bit%20Protected%20Mode)%20Complete-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 <br/>
@@ -78,7 +78,9 @@ graph TD
 .
 ├── src/
 │   ├── boot/
-│   │   └── boot.asm      # 16-битный MBR загрузчик (0x7C00), BIOS int 10h/13h
+│   │   ├── boot.asm      # 16-битный MBR загрузчик (0x7C00), чтение 16 секторов с диска
+│   │   ├── stage2_16.asm # 16-битная стадия: A20, BIOS E820 ОЗУ, настройка GDT
+│   │   └── stage32.asm   # 32-битный Защищенный Режим: видео 0xB8000, Shell hollis32>
 │   ├── kernel/
 │   │   ├── entry.asm     # 64-битная точка входа ядра на чистом ASM (_start)
 │   │   └── main.zig      # Тяжелая подсистема логики на Zig (zig_heavy_init)
@@ -89,6 +91,22 @@ graph TD
 ├── LICENSE               # Лицензия MIT
 └── README.md
 ```
+
+---
+
+## 💻 Команды 32-битной консоли (`hollis32>`)
+
+В 32-битном Защищенном Режиме доступна интерактивная консоль управления:
+
+| Команда | Описание |
+| :--- | :--- |
+| `help` | Список всех доступных команд ядра |
+| `cpu` | Запрос к процессору через `cpuid`: вывод вендора (AMD/Intel) и проверка 64-битного Long Mode |
+| `mem` | Отображение доступного объема ОЗУ (E820) и 32-битной плоской адресации |
+| `color` | Циклическое переключение цветовой темы VGA-терминала (зеленый, голубой, желтый и др.) |
+| `clear` / `cls` | Очистка видеопамяти VGA и терминала через ANSI-последовательность |
+| `next` | Проверка готовности процессора к переходу в 64-битный режим |
+| `reboot` | Аппаратный сброс и перезагрузка через контроллер 8042 (`0x64`) |
 
 > **Особенность кода:** Все файлы снабжены лаконичными и понятными комментариями к смысловым блокам, объясняющими работу низкоуровневого железа и архитектуры.
 
