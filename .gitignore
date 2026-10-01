@@ -1,0 +1,8 @@
+# Временные файлы сборки
+build/
+zig-out/
+.zig-cache/
+*.o
+*.bin
+*.elf
+*.img
