@@ -1,11 +1,12 @@
 # ==============================================================================
-# Hollis-Bit's OS — Makefile сборки и запуска (64-bit Long Mode)
+# Hollis-Bit's OS — Makefile сборки и запуска (Stage 2: Прерывания IDT & Таймер PIT)
 # ==============================================================================
 
 BUILD_DIR = build
 BOOT_SRC  = src/boot/boot.asm
 STAGE2_SRC= src/boot/stage2_16.asm
 ASM_ENTRY = src/kernel/entry.asm
+ASM_ISR   = src/kernel/interrupts.asm
 ZIG_MAIN  = src/kernel/main.zig
 LINKER_LD = src/linker.ld
 IMG       = $(BUILD_DIR)/os.img
@@ -26,12 +27,16 @@ $(BUILD_DIR)/entry.o: $(ASM_ENTRY)
 	@mkdir -p $(BUILD_DIR)
 	nasm -f elf64 $(ASM_ENTRY) -o $@
 
-$(BUILD_DIR)/main.o: $(ZIG_MAIN)
+$(BUILD_DIR)/interrupts.o: $(ASM_ISR)
+	@mkdir -p $(BUILD_DIR)
+	nasm -f elf64 $(ASM_ISR) -o $@
+
+$(BUILD_DIR)/main.o: $(ZIG_MAIN) src/kernel/idt.zig
 	@mkdir -p $(BUILD_DIR)
 	zig build-obj -target x86_64-freestanding-none -O ReleaseSmall $(ZIG_MAIN) -femit-bin=$@
 
-$(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/entry.o $(BUILD_DIR)/main.o $(LINKER_LD)
-	ld -m elf_x86_64 -T $(LINKER_LD) $(BUILD_DIR)/entry.o $(BUILD_DIR)/main.o -o $(BUILD_DIR)/kernel.elf
+$(BUILD_DIR)/kernel.bin: $(BUILD_DIR)/entry.o $(BUILD_DIR)/interrupts.o $(BUILD_DIR)/main.o $(LINKER_LD)
+	ld -m elf_x86_64 -T $(LINKER_LD) $(BUILD_DIR)/entry.o $(BUILD_DIR)/interrupts.o $(BUILD_DIR)/main.o -o $(BUILD_DIR)/kernel.elf
 	objcopy -O binary $(BUILD_DIR)/kernel.elf $@
 
 $(IMG): $(BUILD_DIR)/boot.bin $(BUILD_DIR)/stage2_16.bin $(BUILD_DIR)/kernel.bin

@@ -7,7 +7,7 @@
 [![ASM](https://img.shields.io/badge/Assembler-NASM-blue.svg)](https://nasm.us/)
 [![Target](https://img.shields.io/badge/Target-x86__64_BareMetal-red.svg)]()
 [![Emulator](https://img.shields.io/badge/Emulator-QEMU-purple.svg)](https://www.qemu.org/)
-[![Status](https://img.shields.io/badge/Status-Stage%201%20(64--bit%20Long%20Mode)%20Complete-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/Status-Stage%202%20(IDT%20Interrupts%20&%20PIT%20Timer)%20Complete-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 <br/>
@@ -81,17 +81,18 @@ graph TD
 .
 ├── src/
 │   ├── boot/
-│   │   ├── boot.asm      # 16-битный MBR загрузчик (0x7C00), чтение 16 секторов с диска
-│   │   ├── stage2_16.asm # 16-битная стадия: A20, BIOS E820 ОЗУ, настройка GDT
-│   │   └── stage32.asm   # 32-битный Защищенный Режим: видео 0xB8000, Shell hollis32>
+│   │   ├── boot.asm        # 16-битный MBR загрузчик (0x7C00), чтение ядра с диска
+│   │   └── stage2_16.asm   # Быстрый переход 16 -> 32 -> 64-бит Long Mode (PML4)
 │   ├── kernel/
-│   │   ├── entry.asm     # 64-битная точка входа ядра на чистом ASM (_start)
-│   │   └── main.zig      # Тяжелая подсистема логики на Zig (zig_heavy_init)
-│   └── linker.ld         # Скрипт компоновщика: разметка ядра с адреса 1 МБ
-├── build.zig             # Нативная система сборки Zig 0.16
-├── Makefile              # Сборка через GNU Make
-├── run.sh                # Автоматический скрипт сборки и запуска в QEMU
-├── LICENSE               # Лицензия MIT
+│   │   ├── entry.asm       # 64-битная точка входа ядра на чистом ASM (_start)
+│   │   ├── interrupts.asm  # Ассемблерные стабы прерываний (ISR 0..31, IRQ 0..15)
+│   │   ├── idt.zig         # Таблица прерываний IDT (256 шлюзов), PIC 8259, PIT таймер, Kernel Panic
+│   │   └── main.zig        # 64-битное ядро на Zig и терминал в стиле Linux
+│   └── linker.ld           # Скрипт компоновщика: разметка ядра с адреса 1 МБ
+├── build.zig               # Нативная система сборки Zig 0.16
+├── Makefile                # Сборка через GNU Make
+├── run.sh                  # Автоматический скрипт сборки и запуска в QEMU
+├── LICENSE                 # Лицензия MIT
 └── README.md
 ```
 
@@ -99,21 +100,23 @@ graph TD
 
 ## 💻 64-битная Linux-подобная консоль (`root@hollis-os:~#`)
 
-После мгновенного переключения 16 -> 32 -> 64 бит ядро на Zig запускает полноценный интерактивный терминал:
+После мгновенного перехода в 64 бита ядро активирует прерывания IDT и запускает интерактивный терминал:
 
 | Команда | Описание |
 | :--- | :--- |
 | `uname` / `uname -a` | Вывод информации об архитектуре ядра (`x86_64 BareMetal`) |
 | `whoami` | Текущий пользователь (`root`) |
 | `hostname` | Имя виртуальной машины (`hollis-gaming-station`) |
-| `ls` / `dir` | Список каталогов игр (`doom/`, `quake/`, `diablo/`, `gothic/`, `morrowind/`) и системных файлов |
+| `ls` / `dir` | Список каталогов игр (`doom/`, `quake/`, `diablo/`, `gothic/`, `morrowind/`) и файлов |
 | `cat <file>` | Просмотр содержимого файлов (`cat readme.txt`, `cat os-release`, `cat system.log`) |
 | `echo <text>` | Вывод переданного текста на экран |
 | `free` / `free -m` | Статистика оперативной памяти (Total, Used, Free RAM) |
-| `uptime` | Время работы и счетчик тиков системы |
+| `uptime` | Настоящий счетчик времени работы ядра, вычисляемый по тикам PIT таймера (100 Гц) |
+| `ticks` | Точное количество тиков аппаратного таймера PIT (IRQ 0) с момента старта |
+| `crash` | Тест обработчика исключений процессора: деление на ноль (`#DE`) с экраном Kernel Panic |
 | `games` | Таблица статуса готовности игровых подсистем |
 | `clear` | Очистка видеопамяти и терминала через ANSI `\033[2J\033[H` |
-| `reboot` | Аппаратный перезапуск через порт контроллера `0x64` |
+| `reboot` | Аппаратный перезапуск через контроллер `0x64` |
 | `poweroff` / `halt` | Остановка процессора |
 | `help` / `man` | Полный список доступных команд |
 

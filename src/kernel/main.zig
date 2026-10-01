@@ -161,6 +161,27 @@ fn strStartsWith(full: []const u8, prefix: []const u8) bool {
 }
 
 
+const idt = @import("idt.zig");
+
+// Вспомогательная функция вывода целого беззнакового числа
+fn printU64(val: u64) void {
+    if (val == 0) {
+        printChar('0');
+        return;
+    }
+    var buf: [32]u8 = undefined;
+    var v = val;
+    var i: usize = 0;
+    while (v > 0) : (i += 1) {
+        buf[i] = @truncate((v % 10) + '0');
+        v /= 10;
+    }
+    while (i > 0) {
+        i -= 1;
+        printChar(buf[i]);
+    }
+}
+
 // ==============================================================================
 // ГЛАВНАЯ ТОЧКА ВХОДА 64-БИТНОГО ЯДРА (kmain)
 // ==============================================================================
@@ -168,17 +189,22 @@ fn strStartsWith(full: []const u8, prefix: []const u8) bool {
 export fn kmain() callconv(.c) noreturn {
     clearScreen();
 
-    // 1. Приветственный баннер Linux-стиля
+    // 1. Инициализация таблицы дескрипторов прерываний IDT и запуск таймера PIT
+    idt.init();
+    asm volatile ("sti"); // Разрешаем аппаратные прерывания процессора (STI)
+
+    // 2. Приветственный баннер Linux-стиля
     printString("================================================================\n");
     printString("    HOLLIS-BIT's GAMING OS (x86_64 Long Mode & Zig Kernel)      \n");
     printString("================================================================\n");
     printString("Kernel: 64-bit Freestanding Zig | Paging: 4-level PML4 Active\n");
+    printString("Interrupts: IDT (256 gates) Active | PIT Timer: 100 Hz (IRQ 0)\n");
     printString("Type 'help' for available Linux-style terminal commands.\n\n");
 
     var cmd_buf: [128]u8 = undefined;
     var cmd_len: usize = 0;
 
-    // 2. Главный командный цикл терминала (root@hollis-os:~# )
+    // 3. Главный командный цикл терминала (root@hollis-os:~# )
     while (true) {
         printString("root@hollis-os:~# ");
         cmd_len = 0;
@@ -228,7 +254,9 @@ fn executeCommand(cmd: []const u8) void {
         printString("  cat <file>   - Concatenate and display file content\n");
         printString("  echo <text>  - Display a line of text\n");
         printString("  free [-m]    - Display free and used physical memory\n");
-        printString("  uptime       - Tell how long the system has been running\n");
+        printString("  uptime       - Live system uptime calculated from PIT timer\n");
+        printString("  ticks        - Total hardware timer ticks count (IRQ 0)\n");
+        printString("  crash        - Test CPU exception handler (#DE Divide-by-Zero)\n");
         printString("  games        - Display status of planned gaming ports\n");
         printString("  clear        - Clear the terminal screen\n");
         printString("  reboot       - Reboot the operating system\n");
@@ -308,7 +336,37 @@ fn executeCommand(cmd: []const u8) void {
     }
 
     if (strEql(cmd, "uptime")) {
-        printString(" 00:00:42 up 1 min,  1 user,  load average: 0.00, 0.00, 0.00\n");
+        const ticks = idt.system_ticks;
+        const total_sec = ticks / 100; // 100 Гц = 100 тиков в секунду
+        const minutes = total_sec / 60;
+        const seconds = total_sec % 60;
+
+        printString(" up ");
+        printU64(minutes);
+        printString(" min, ");
+        printU64(seconds);
+        printString(" sec (total hardware ticks: ");
+        printU64(ticks);
+        printString("),  1 user,  load average: 0.00, 0.00, 0.00\n");
+        return;
+    }
+
+    if (strEql(cmd, "ticks")) {
+        printString("PIT Hardware Timer (IRQ 0) total ticks: ");
+        printU64(idt.system_ticks);
+        printString(" (running at 100 Hz)\n");
+        return;
+    }
+
+    if (strEql(cmd, "crash")) {
+        printString("Triggering Divide-by-Zero CPU Exception (#DE Exception 0)...\n");
+        const a: u64 = 42;
+        const b: u64 = 0;
+        _ = asm volatile ("divq %[b]"
+            : [ret] "={rax}" (-> u64),
+            : [b] "r" (b),
+              [a] "{rax}" (a),
+        );
         return;
     }
 
