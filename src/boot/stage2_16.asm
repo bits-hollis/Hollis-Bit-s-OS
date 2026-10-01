@@ -9,7 +9,15 @@
 [org 0x7e00]
 
 stage2_entry:
-    ; 1. Сохраняем номер диска из регистра DL
+    ; 1. Настройка сегментов данных и стека
+    cli
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0x7c00
+    sti                 ; Разрешаем прерывания для контроллера клавиатуры
+
     mov [boot_drive], dl
 
     ; 2. Вывод красивого баннера 16-битного этапа
@@ -17,15 +25,13 @@ stage2_entry:
     call print_string
 
     ; 3. Проверка и включение адресной линии A20
-    ; В 8086 процессоре адреса заворачивались по кругу на 1 МБ (wrap-around).
-    ; Линия A20 открывает 21-й провод адресации для доступа к памяти выше 1 МБ.
     call check_a20
     cmp ax, 1
     je .a20_already_on
 
-    ; Если A20 выключена — включаем через Fast A20 (аппаратный порт 0x92)
+    ; Если A20 выключена — включаем через Fast A20 (порт 0x92)
     in al, 0x92
-    or al, 00000010b    ; Устанавливаем 1-й бит (Fast A20)
+    or al, 00000010b
     out 0x92, al
 
 .a20_already_on:
@@ -33,23 +39,48 @@ stage2_entry:
     call print_string
 
     ; 4. Определение доступной оперативной памяти через BIOS E820
-    ; Системный вызов BIOS int 0x15 (EAX = 0xE820) считывает карту физической памяти.
     call detect_memory_e820
 
-    ; 5. Интерактивная проверка клавиатурного прерывания BIOS (int 0x16)
-    ; Демонстрирует чтение клавиш в реальном режиме без драйверов.
+    ; 5. Интерактивная проверка ввода (поддерживает и окно QEMU, и терминал через COM1)
     mov si, msg_press_key
     call print_string
 
-    mov ah, 0x00        ; Функция 0: ожидание нажатия клавиши
-    int 0x16            ; AL содержит ASCII-символ нажатой клавиши
+.wait_key_loop:
+    ; Проверка 1: Нажатие клавиши в окне QEMU (BIOS int 0x16, AH = 0x01)
+    mov ah, 0x01
+    int 0x16
+    jnz .key_from_bios
 
+    ; Проверка 2: Ввод символа в терминале (COM1 Serial порт 0x3FD, бит 0 = Data Ready)
+    mov dx, 0x3fd
+    in al, dx
+    test al, 0x01
+    jnz .key_from_serial
+
+    pause
+    jmp .wait_key_loop
+
+.key_from_bios:
+    mov ah, 0x00        ; Извлекаем символ из буфера BIOS
+    int 0x16
+    jmp .display_key
+
+.key_from_serial:
+    mov dx, 0x3f8       ; Считываем символ из порта данных COM1
+    in al, dx
+
+.display_key:
+    ; Сохраняем и выводим полученный символ
+    push ax
     mov si, msg_key_ok
     call print_string
-    mov ah, 0x0e        ; Печатаем нажатый символ на экране
+
+    pop ax
+    mov ah, 0x0e        ; Печать в видеопамять BIOS
     int 0x10
-    mov dx, 0x3f8       ; И отправляем в COM1
+    mov dx, 0x3f8       ; Печать в терминал через COM1
     out dx, al
+
     mov si, newline
     call print_string
 
@@ -57,7 +88,7 @@ stage2_entry:
     mov si, msg_stage1_done
     call print_string
 
-    ; 7. Остановка процессора до дальнейших указаний разработчика
+    ; 7. Остановка процессора до дальнейших указаний
 .halt_loop:
     hlt
     jmp .halt_loop
